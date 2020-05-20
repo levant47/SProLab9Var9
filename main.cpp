@@ -20,6 +20,8 @@ HWND sumTextBox;
 std::string sumString;
 HWND averageTextBox;
 std::string averageString;
+HWND aboveAverageTextBox;
+std::string aboveAverageString;
 
 int GetPositiveCount(int source[], int count)
 {
@@ -91,12 +93,40 @@ int GetAverage(int source[], int count)
         pop ebx
         cmp [count], 0
         je returnZero
-        mov ecx, [count]
         cdq
-        idiv ecx
+        idiv DWORD PTR [count]
         jmp end
         returnZero:
         mov eax, 0
+        end:
+    }
+}
+
+int GetAboveAverageCount(int source[], int count)
+{
+    __asm
+    {
+        mov eax, [count]
+        push eax
+        mov eax, [source]
+        push eax
+        call GetAverage
+        pop ebx
+        pop ebx
+        mov edx, eax
+        mov eax, 0
+
+        mov ebx, [source]
+        mov ecx, 0
+        start_loop:
+        cmp ecx, [count]
+        jge end
+        cmp DWORD PTR [ebx + ecx * 4], edx
+        jle skipIncrement
+        inc eax
+        skipIncrement:
+        inc ecx
+        jmp start_loop
         end:
     }
 }
@@ -204,16 +234,18 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_CREATE:
         {
             inputTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER,
-                70, 10, 200, 25, hWnd, NULL, hInst, NULL);
+                90, 10, 200, 25, hWnd, NULL, hInst, NULL);
             SetWindowText(inputTextBox, "1 2 3 4 5 -6 -7 -8 -9 -10");
             positiveCountTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
-                70, 40, 200, 25, hWnd, NULL, hInst, NULL);
+                90, 40, 200, 25, hWnd, NULL, hInst, NULL);
             negativeCountTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
-                70, 70, 200, 25, hWnd, NULL, hInst, NULL);
+                90, 70, 200, 25, hWnd, NULL, hInst, NULL);
             sumTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
-                70, 100, 200, 25, hWnd, NULL, hInst, NULL);
+                90, 100, 200, 25, hWnd, NULL, hInst, NULL);
             averageTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
-                70, 130, 200, 25, hWnd, NULL, hInst, NULL);
+                90, 130, 200, 25, hWnd, NULL, hInst, NULL);
+            aboveAverageTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
+                90, 160, 200, 25, hWnd, NULL, hInst, NULL);
 
             break;
         }
@@ -242,6 +274,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             TextOut(hdc, 5, 105, sumText, sizeof(sumText));
             char averageText[] = "Average:";
             TextOut(hdc, 5, 135, averageText, sizeof(averageText));
+            char aboveAverageText[] = "Above avg.:";
+            TextOut(hdc, 5, 165, aboveAverageText, sizeof(aboveAverageText));
 
             char inputRawText[256];
             auto arrayString = GetWindowText(inputTextBox, inputRawText, 256);
@@ -268,6 +302,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                 auto average = GetAverage(ints.data(), ints.size());
                 averageString = std::to_string(average);
                 SetWindowText(averageTextBox, averageString.c_str());
+
+                auto aboveAverage = GetAboveAverageCount(ints.data(), ints.size());
+                aboveAverageString = std::to_string(aboveAverage);
+                SetWindowText(aboveAverageTextBox, aboveAverageString.c_str());
             }
             else
             {
