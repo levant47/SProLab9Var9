@@ -1,5 +1,7 @@
 #include <windows.h>
 #include <stdio.h>
+#include <vector>
+#include <string>
 
 HINSTANCE hInst;
 LPCTSTR szWindowClass = "WindowClass";
@@ -11,12 +13,91 @@ LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 HWND inputTextBox;
 HWND positiveCountTextBox;
+std::string positiveCountString;
+HWND negativeCountTextBox;
+std::string negativeCountString;
+HWND sumTextBox;
+std::string sumString;
+HWND averageTextBox;
+std::string averageString;
 
 int GetPositiveCount(int source[], int count)
 {
     __asm
     {
-        mov eax, 10
+        mov ebx, [source]
+        mov eax, 0
+        mov ecx, 0
+        start_loop:
+        cmp ecx, [count]
+        jge end
+        cmp DWORD PTR [ebx + ecx * 4], 0
+        jle skipIncrement
+        inc eax
+        skipIncrement:
+        inc ecx
+        jmp start_loop
+        end:
+    }
+}
+
+int GetNegativeCount(int source[], int count)
+{
+    __asm
+    {
+        mov ebx, [source]
+        mov eax, 0
+        mov ecx, 0
+        start_loop:
+        cmp ecx, [count]
+        jge end
+        cmp DWORD PTR [ebx + ecx * 4], 0
+        jge skipIncrement
+        inc eax
+        skipIncrement:
+        inc ecx
+        jmp start_loop
+        end:
+    }
+}
+
+int GetSum(int source[], int count)
+{
+    __asm
+    {
+        mov ebx, [source]
+        mov eax, 0
+        mov ecx, 0
+        start_loop:
+        cmp ecx, [count]
+        jge end
+        add eax, DWORD PTR [ebx + ecx * 4]
+        inc ecx
+        jmp start_loop
+        end:
+    }
+}
+
+int GetAverage(int source[], int count)
+{
+    __asm
+    {
+        mov eax, [count]
+        push eax
+        mov eax, [source]
+        push eax
+        call GetSum
+        pop ebx
+        pop ebx
+        cmp [count], 0
+        je returnZero
+        mov ecx, [count]
+        cdq
+        idiv ecx
+        jmp end
+        returnZero:
+        mov eax, 0
+        end:
     }
 }
 
@@ -63,6 +144,59 @@ void InitInstance(HINSTANCE hInstance, int nCmdShow)
     UpdateWindow(hWnd);
 }
 
+std::vector<std::string> SplitStringBySpace(std::string source)
+{
+    std::vector<std::string> words;
+    std::string currentWord;
+    for (size_t i = 0; i < source.size(); i++)
+    {
+        if (source[i] != ' ')
+        {
+            currentWord += source[i];
+        }
+        else
+        {
+            if (currentWord.length() != 0)
+            {
+                words.push_back(currentWord);
+                currentWord = "";
+            }
+        }
+    }
+    if (currentWord.length() != 0)
+    {
+        words.push_back(currentWord);
+        currentWord = "";
+    }
+    return words;
+}
+
+bool ValidateWordsAreNumbers(std::vector<std::string> source)
+{
+    for (size_t wordIndex = 0; wordIndex < source.size(); wordIndex++)
+    {
+        for (size_t charIndex = 0; charIndex < source[wordIndex].length(); charIndex++)
+        {
+            char c = source[wordIndex][charIndex];
+            if (!(c >= '0' && c <= '9') && !(c == '-' && charIndex == 0 && source[wordIndex].length() > 1))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+std::vector<int> ParseWordsToInts(std::vector<std::string> source)
+{
+    std::vector<int> ints;
+    for (size_t i = 0; i < source.size(); i++)
+    {
+        ints.push_back(std::atoi(source[i].c_str()));
+    }
+    return ints;
+}
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
@@ -70,11 +204,27 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         case WM_CREATE:
         {
             inputTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER,
-                45, 10, 200, 25, hWnd, NULL, hInst, NULL);
+                70, 10, 200, 25, hWnd, NULL, hInst, NULL);
             SetWindowText(inputTextBox, "1 2 3 4 5 -6 -7 -8 -9 -10");
             positiveCountTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
-                45, 40, 200, 25, hWnd, NULL, hInst, NULL);
+                70, 40, 200, 25, hWnd, NULL, hInst, NULL);
+            negativeCountTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
+                70, 70, 200, 25, hWnd, NULL, hInst, NULL);
+            sumTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
+                70, 100, 200, 25, hWnd, NULL, hInst, NULL);
+            averageTextBox = CreateWindowEx(NULL, "EDIT", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_LEFT | WS_DISABLED,
+                70, 130, 200, 25, hWnd, NULL, hInst, NULL);
 
+            break;
+        }
+        case WM_COMMAND:
+        {
+            HWND control = (HWND)lParam;
+            int message = HIWORD(wParam);
+            if (control == inputTextBox && message == WM_USER)
+            {
+                RedrawWindow(hWnd, NULL, NULL, RDW_INVALIDATE | RDW_ERASE);
+            }
             break;
         }
         case WM_PAINT:
@@ -82,10 +232,49 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             PAINTSTRUCT paintStruct;
             HDC hdc = BeginPaint(hWnd, &paintStruct);
 
-            char mousePositionTitle[] = "Input:";
-            TextOut(hdc, 5, 15, mousePositionTitle, sizeof(mousePositionTitle));
-            char positiveCountText[] = "Input:";
-            TextOut(hdc, 5, 15, mousePositionTitle, sizeof(mousePositionTitle));
+            char inputTitle[] = "Input:";
+            TextOut(hdc, 5, 15, inputTitle, sizeof(inputTitle));
+            char positiveCountText[] = "Positive:";
+            TextOut(hdc, 5, 45, positiveCountText, sizeof(positiveCountText));
+            char negativeCountText[] = "Negative:";
+            TextOut(hdc, 5, 75, negativeCountText, sizeof(negativeCountText));
+            char sumText[] = "Sum:";
+            TextOut(hdc, 5, 105, sumText, sizeof(sumText));
+            char averageText[] = "Average:";
+            TextOut(hdc, 5, 135, averageText, sizeof(averageText));
+
+            char inputRawText[256];
+            auto arrayString = GetWindowText(inputTextBox, inputRawText, 256);
+
+            std::string inputText(inputRawText);
+
+            auto words = SplitStringBySpace(inputText);
+            if (ValidateWordsAreNumbers(words))
+            {
+                auto ints = ParseWordsToInts(words);
+
+                auto positiveCount = GetPositiveCount(ints.data(), ints.size());
+                positiveCountString = std::to_string(positiveCount);
+                SetWindowText(positiveCountTextBox, positiveCountString.c_str());
+
+                auto negativeCount = GetNegativeCount(ints.data(), ints.size());
+                negativeCountString = std::to_string(negativeCount);
+                SetWindowText(negativeCountTextBox, negativeCountString.c_str());
+
+                auto sum = GetSum(ints.data(), ints.size());
+                sumString = std::to_string(sum);
+                SetWindowText(sumTextBox, sumString.c_str());
+
+                auto average = GetAverage(ints.data(), ints.size());
+                averageString = std::to_string(average);
+                SetWindowText(averageTextBox, averageString.c_str());
+            }
+            else
+            {
+                char warning[] = "This is not a valid array of integers";
+                SetTextColor(hdc, RGB(255, 0, 0));
+                TextOut(hdc, 275, 15, warning, sizeof(warning));
+            }
 
             EndPaint(hWnd, &paintStruct);
 
